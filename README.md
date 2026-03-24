@@ -1,6 +1,6 @@
-# pyfade
+# PyFADE
 
-`pyfade` is a MATLAB-aligned Python package for FADE fog density estimation.
+`PyFADE` is a MATLAB-aligned Python package for FADE fog density estimation.
 It packages the optimized Python implementation together with the original
 reference model parameters and exposes one public entry point that accepts:
 
@@ -40,11 +40,14 @@ cd pyfade
 pip install ".[tensor]"
 ```
 
-Once published, the package can be installed from PyPI with:
+Once published, the distribution can be installed from PyPI with:
 
 ```bash
-pip install pyfade
+pip install fade-python
 ```
+
+The project name is `PyFADE`. The published distribution name is
+`fade-python`, while the import package and CLI command remain `pyfade`.
 
 ## Usage
 
@@ -137,7 +140,7 @@ scores = fade(batch_tensor, workers=4, progress=True)
 
 ## CLI
 
-The package installs a `pyfade` command and is imported with `import pyfade`:
+`PyFADE` installs a `pyfade` command and is imported with `import pyfade`:
 
 ```bash
 pyfade /path/to/image.png
