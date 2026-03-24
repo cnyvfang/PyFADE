@@ -6,7 +6,7 @@ It packages the optimized Python implementation together with the original refer
 
 ## ⚙️ Installation
 
-Installed from PyPI with:
+Install from PyPI with:
 
 ```bash
 pip install fade-python
