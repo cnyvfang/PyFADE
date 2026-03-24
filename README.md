@@ -169,7 +169,7 @@ The table below uses the `RTTS` dataset and the dehazing results from `PRISM` wi
 | Python optimized |       4 |         169.47 | 25.6466 | 0.470454676908513 | N/A | N/A  |
 | Python optimized |       8  |         131.98 | 32.9707 | 0.470454676908513 | N/A | N/A  |
 
-The initial Python port was already highly consistent with MATLAB, but slower. The optimized Python version preserves MATLAB-level numerical agreement while substantially improving single-thread performance. On this machine (Apple M2 Pro, 32GB RAM), the optimized Python version is faster than MATLAB with 1, 4, and 8 image-level workers.
+Our initial Python port was already highly consistent with MATLAB, but slower. The optimized Python version preserves MATLAB-level numerical agreement while substantially improving single-thread performance. On this machine (Apple M2 Pro, 32GB RAM), the optimized Python version is faster than MATLAB with 1, 4, and 8 image-level workers.
 
 ## MATLAB vs. Initial Python Port
 
@@ -182,11 +182,9 @@ The initial Python port was already highly consistent with MATLAB, but slower. T
 - The Python package provides a broader interface surface than the original
   MATLAB function: it supports folder paths, image paths, `.npy` files, NumPy
   arrays, and tensor-like inputs.
-- Precision of the initial Python version was already close to MATLAB:
-  `Score MAE = 2.469e-11`, `Score max abs diff = 1.346e-08`,
-  `Map global MAE = 2.370e-09`.
+- Precision of the initial Python version was already close to MATLAB.
 - Performance of the initial Python single-thread version was much worse than
-  MATLAB single-thread: `1784.01s` vs. `801.72s`.
+  MATLAB single-thread.
 
 ## Optimized Python vs. Initial Python
 
@@ -197,11 +195,7 @@ The initial Python port was already highly consistent with MATLAB, but slower. T
   - cached MSCN and CE kernels
   - faster 1D convolution path for `1xN` and `Nx1` kernels
   - vectorized packed-`bincount` entropy evaluation
-- Precision is effectively unchanged:
-  - `Score MAE`: `2.469e-11 -> 2.488e-11`
-  - `Score RMSE`: `2.723e-10 -> 2.722e-10`
-  - `Score max abs diff`: unchanged at `1.346e-08`
-  - `Map global MAE`: unchanged at `2.370e-09`
+- Precision is effectively unchanged.
 - Single-thread performance improved from `1784.01s` to `545.38s`,
   about `3.27x` faster than the initial Python version.
 
