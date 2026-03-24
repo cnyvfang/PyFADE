@@ -4,7 +4,7 @@ PyFADE is an unofficial MATLAB-aligned Python package for FADE metric (Fog Aware
 It packages the optimized Python implementation together with the original reference model parameters. The implementation is designed to match the MATLAB code path closely.
 
 
-## Installation
+## ⚙️ Installation
 
 Installed from PyPI with:
 
@@ -28,7 +28,7 @@ pip install ".[tensor]"    # with PyTorch input support
 The published distribution name is
 `fade-python`, while the import package and CLI command remain `pyfade`.
 
-## Usage
+## 🔨 Usage
 
 ```python
 from pyfade import fade
@@ -105,7 +105,7 @@ normalized = batch.to(torch.float32) / 255.0
 scores, density_maps = fade(normalized, workers=4, progress=True, return_map=True)
 ```
 
-## Parallelism and Progress
+## 🚀 Parallelism and Progress
 
 - `workers` controls image-level concurrency
 - `progress=True` enables a `tqdm` progress bar for folder and batch evaluation
@@ -117,7 +117,7 @@ result = fade("/path/to/folder", workers=8, progress=True)
 scores = fade(batch_tensor, workers=4, progress=True)
 ```
 
-## CLI
+## 👨‍💻 CLI
 
 `PyFADE` installs a `pyfade` command and is imported with `import pyfade`:
 
@@ -128,7 +128,7 @@ pyfade /path/to/array.npy --workers 4
 pyfade /path/to/image.png --return-map
 ```
 
-## Reference
+## 📖 Reference
 
 To use PyFADE to validate your methods, please cite the paper of FADE.
 ```bash
@@ -143,7 +143,7 @@ To use PyFADE to validate your methods, please cite the paper of FADE.
   publisher={IEEE}
 }
 ```
-If you think our porting has helped you, we also hope that you will pay attention to and cite our work.
+If you find our port useful, we would appreciate it if you consider citing our work.
 ```bash
 @article{fang2024real,
   title={Real-world image dehazing with coherence-based pseudo labeling and cooperative unfolding network},
@@ -155,7 +155,7 @@ If you think our porting has helped you, we also hope that you will pay attentio
 }
 ```
 
-## Benchmark and Precision Summary
+## 📈 Benchmark and Precision Summary
 
 The table below uses the `RTTS` dataset and the dehazing results from `PRISM` with `4322` images.
 
@@ -171,7 +171,7 @@ The table below uses the `RTTS` dataset and the dehazing results from `PRISM` wi
 
 Our initial Python port was already highly consistent with MATLAB, but slower. The optimized Python version preserves MATLAB-level numerical agreement while substantially improving single-thread performance. On this machine (Apple M2 Pro, 32GB RAM), the optimized Python version is faster than MATLAB with 1, 4, and 8 image-level workers.
 
-## MATLAB vs. Initial Python Port
+## 🔍 MATLAB vs. Initial Python Port
 
 - Both versions implement the same FADE algorithm and use the same original
   reference models.
@@ -186,7 +186,7 @@ Our initial Python port was already highly consistent with MATLAB, but slower. T
 - Performance of the initial Python single-thread version was much worse than
   MATLAB single-thread.
 
-## Optimized Python vs. Initial Python
+## 🪄 Optimized Python vs. Initial Python
 
 - The score definition, feature definition, bundled model parameters, and
   MATLAB-alignment rules are unchanged.
