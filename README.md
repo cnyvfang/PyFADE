@@ -156,7 +156,7 @@ If you find our port useful, we would appreciate it if you consider citing our w
 
 ## 📈 Benchmark and Precision Summary
 
-The table below uses the `RTTS` dataset and the dehazing results from `PRISM` with `4322` images.
+The table below uses the `RTTS` dataset and the dehazing results from `PRISM (Not yet public)` with `4322` images.
 
 | Runtime                 | Workers | Total Time (s) | Throughput (img/s) | Mean score | Mean score diff vs. MATLAB  | Max score abs diff |
 |-------------------------|--------:|---------------:| ---: | ---: | ---: | ---: |
