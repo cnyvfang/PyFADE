@@ -1,52 +1,31 @@
 # PyFADE
 
-`PyFADE` is a MATLAB-aligned Python package for FADE fog density estimation.
-It packages the optimized Python implementation together with the original
-reference model parameters and exposes one public entry point that accepts:
+`PyFADE` is a MATLAB-aligned Python package for Fog Aware Density Evaluator (FADE) fog density estimation.
+It packages the optimized Python implementation together with the original reference model parameters. The implementation is designed to match the MATLAB FADE code path closely.
 
-- a folder path
-- a single image path
-- a NumPy array
-- a PyTorch tensor
-
-The implementation is designed to match the MATLAB FADE code path closely:
-
-- `float64` image statistics
-- MATLAB-style `8x8` patch trimming and column-major patch order
-- MATLAB-compatible `rgb2gray`, `rgb2hsv`, `fspecial('gaussian')`
-- `imfilter(...,'replicate')`, `conv2(...,'same')`, `entropy`, `nanvar`, and `std`
-- direct use of the original FADE `.mat` reference models
 
 ## Installation
 
-Install from a local checkout:
-
-```bash
-cd pyfade
-pip install .
-```
-
-Editable install for development:
-
-```bash
-cd pyfade
-pip install -e ".[dev]"
-```
-
-Install with PyTorch input support:
-
-```bash
-cd pyfade
-pip install ".[tensor]"
-```
-
-Once published, the distribution can be installed from PyPI with:
+Installed from PyPI with:
 
 ```bash
 pip install fade-python
 ```
 
-The project name is `PyFADE`. The published distribution name is
+Install from a local checkout:
+
+```bash
+git clone https://github.com/cnyvfang/PyFADE
+cd pyfade
+# Option 1:
+pip install .              # standard install
+# Option 2:
+pip install -e ".[dev]"    # editable install for development
+# Option 3:
+pip install ".[tensor]"    # with PyTorch input support
+```
+
+The published distribution name is
 `fade-python`, while the import package and CLI command remain `pyfade`.
 
 ## Usage
@@ -151,25 +130,19 @@ pyfade /path/to/image.png --return-map
 
 ## Benchmark and Precision Summary
 
-The table below uses the `5PRISM` dataset with `4322` images.
+The table below uses the `RTTS` dataset and the dehazing results from `PRISM` with `4322` images.
 
-| Runtime | Workers | Internal elapsed (s) | External real (s) | Throughput (img/s) | Mean score | Mean score diff vs. MATLAB | Score diff vs. MATLAB | Max score abs diff | Map diff vs. MATLAB | Max map abs diff |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | --- | ---: |
-| MATLAB | 1 | 801.722575 | 809.04 | 5.3909 | 0.470454676887910 | 0.000e+00 | Baseline | 0.000e+00 | baseline | 0.000e+00 |
-| MATLAB | 4 | 278.207849 | 286.69 | 15.5351 | 0.470454676887910 | 0.000e+00 | N/A | N/A | N/A | N/A |
-| MATLAB | 8 | 208.548858 | 216.34 | 20.7242 | 0.470454676887910 | 0.000e+00 | N/A | N/A | N/A | N/A |
-| Python pre-optimization | 1 | 1784.010954 | 1785.01 | 2.4226 | 0.470454676908741 | 2.083e-11 | MAE 2.469e-11; RMSE 2.723e-10 | 1.346e-08 | MAE 2.370e-09; RMSE 2.261e-07 | 7.121e-04 |
-| Python optimized | 1 | 545.379295 | 546.15 | 7.9248 | 0.470454676908513 | 2.060e-11 | MAE 2.488e-11; RMSE 2.722e-10 | 1.346e-08 | MAE 2.370e-09; RMSE 2.261e-07 | 7.121e-04 |
-| Python optimized | 4 | 168.521469 | 169.47 | 25.6466 | 0.470454676908513 | 2.060e-11 | N/A | N/A | N/A | N/A |
-| Python optimized | 8 | 131.086210 | 131.98 | 32.9707 | 0.470454676908513 | 2.060e-11 | N/A | N/A | N/A | N/A |
+| Runtime | Workers | Total Time (s) | Throughput (img/s) | Mean score | Mean score diff vs. MATLAB  | Max score abs diff |
+| --- |--------:|---------------:| ---: | ---: | ---: | ---: |
+| MATLAB |       1 |         809.04 | 5.3909 | 0.470454676887910 | 0.000e+00  | 0.000e+00 |
+| MATLAB |       4 |         286.69 | 15.5351 | 0.470454676887910 | N/A | N/A  |
+| MATLAB |       8 |         216.34 | 20.7242 | 0.470454676887910 | N/A | N/A  |
+| Python pre-optimization |       1 |        1785.01 | 2.4226 | 0.470454676908741 | 2.083e-11 | 1.346e-08  |
+| Python optimized |       1 |         546.15 | 7.9248 | 0.470454676908513 | 2.060e-11 | 1.346e-08  |
+| Python optimized |       4 |         169.47 | 25.6466 | 0.470454676908513 | N/A | N/A  |
+| Python optimized |       8  |         131.98 | 32.9707 | 0.470454676908513 | N/A | N/A  |
 
-Summary:
-
-- The initial Python port was already highly consistent with MATLAB, but slower.
-- The optimized Python version preserves MATLAB-level numerical agreement while
-  improving single-thread performance substantially.
-- On this machine, the optimized Python version is faster than MATLAB at `1`,
-  `4`, and `8` image-level workers.
+The initial Python port was already highly consistent with MATLAB, but slower. The optimized Python version preserves MATLAB-level numerical agreement while substantially improving single-thread performance. On this machine (Apple M2 Pro, 32GB RAM), the optimized Python version is faster than MATLAB with 1, 4, and 8 image-level workers.
 
 ## MATLAB vs. Initial Python Port
 
@@ -205,10 +178,3 @@ Summary:
 - Single-thread performance improved from `1784.01s` to `545.38s`,
   about `3.27x` faster than the initial Python version.
 
-## Development
-
-```bash
-cd pyfade
-pip install -e ".[dev]"
-pytest
-```
