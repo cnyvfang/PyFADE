@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyfade"
+version = "0.1.0"
+description = "MATLAB-aligned Python package for FADE fog density estimation."
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.10"
+license = "LicenseRef-pyfade-package-notice"
+license-files = ["LICENSE"]
+authors = [
+  {name = "Chengyu Fang"},
+]
+maintainers = [
+  {name = "Chengyu Fang"},
+]
+dependencies = [
+  "numpy>=2.2",
+  "scipy>=1.15",
+  "pillow>=12.1",
+  "tqdm>=4.67",
+]
+keywords = ["fade", "fog", "image-quality", "matlab", "computer-vision"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+[project.optional-dependencies]
+tensor = [
+  "torch>=2.11",
+]
+dev = [
+  "pytest>=9.0",
+]
+
+[project.scripts]
+pyfade = "pyfade.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/cnyvfang/PyFADE"
+Repository = "https://github.com/cnyvfang/PyFADE"
+Issues = "https://github.com/cnyvfang/PyFADE/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.package-data]
+pyfade = ["models/*.mat"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,19 @@
+pyfade package notice
+
+Copyright (c) 2026 pyfade maintainers
+
+The Python source code in this package is provided for research, evaluation,
+and internal use. Redistribution or other use of bundled FADE assets must also
+comply with the terms of the original FADE release.
+
+This package bundles original FADE reference model files in order to preserve
+numerical compatibility with the MATLAB release. Those original assets remain
+subject to their original authors' terms and notices.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
