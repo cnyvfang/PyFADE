@@ -1,8 +1,7 @@
 # PyFADE
 
-PyFADE is an unofficial Python package for FADE metric (Fog Aware Density Evaluator) fog density estimation.
-It packages the optimized Python implementation together with the original reference model parameters. The implementation is designed to match the MATLAB calculation path closely.
-
+PyFADE is an unofficial Python implementation of FADE (Fog Aware Density Evaluator).
+The implementation is designed to closely match the MATLAB results, while providing higher efficiency and stronger plug-and-play compatibility with existing experimental code.
 
 ## ⚙️ Installation
 
