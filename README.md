@@ -1,6 +1,6 @@
 # PyFADE
 
-`PyFADE` is a MATLAB-aligned Python package for Fog Aware Density Evaluator (FADE) fog density estimation.
+PyFADE is a MATLAB-aligned Python package for Fog Aware Density Evaluator (FADE) fog density estimation.
 It packages the optimized Python implementation together with the original reference model parameters. The implementation is designed to match the MATLAB FADE code path closely.
 
 
@@ -126,6 +126,33 @@ pyfade /path/to/image.png
 pyfade /path/to/folder --workers 4 --progress
 pyfade /path/to/array.npy --workers 4
 pyfade /path/to/image.png --return-map
+```
+
+## Reference
+
+To use PyFADE to validate your methods, please cite the paper of FADE.
+```bash
+@article{choi2015referenceless,
+  title={Referenceless prediction of perceptual fog density and perceptual image defogging},
+  author={Choi, Lark Kwon and You, Jaehee and Bovik, Alan Conrad},
+  journal={IEEE Transactions on Image Processing},
+  volume={24},
+  number={11},
+  pages={3888--3901},
+  year={2015},
+  publisher={IEEE}
+}
+```
+If you think our porting has helped you, we also hope that you will pay attention to and cite our work.
+```bash
+@article{fang2024real,
+  title={Real-world image dehazing with coherence-based pseudo labeling and cooperative unfolding network},
+  author={Fang, Chengyu and He, Chunming and Xiao, Fengyang and Zhang, Yulun and Tang, Longxiang and Zhang, Yuelin and Li, Kai and Li, Xiu},
+  journal={Advances in Neural Information Processing Systems},
+  volume={37},
+  pages={97859--97883},
+  year={2024}
+}
 ```
 
 ## Benchmark and Precision Summary
