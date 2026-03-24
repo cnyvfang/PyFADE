@@ -1,6 +1,6 @@
 # PyFADE
 
-**Development in progress, please pay attention and wait for the stable version to be released, the stable version will be released soon.**
+**Development in progress, please wait for the stable version to be released, the stable version will be released soon.**
 
 PyFADE is an unofficial Python implementation of FADE (Fog Aware Density Evaluator).
 The implementation is designed to closely match the MATLAB results, while providing higher efficiency and stronger plug-and-play compatibility with existing experimental code.
