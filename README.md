@@ -186,7 +186,7 @@ Our initial Python port was already highly consistent with MATLAB, but slower. T
 - Performance of the initial Python single-thread version was much worse than
   MATLAB single-thread.
 
-## 🪄 Optimized Python vs. Initial Python
+## 🪄 Optimized Python Port vs. Initial Python Port
 
 - The score definition, feature definition, bundled model parameters, and
   MATLAB-alignment rules are unchanged.
