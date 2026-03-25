@@ -136,7 +136,7 @@ pyfade /path/to/image.png --return-map
 
 ## 📖 Reference
 
-To use PyFADE to validate your methods, please cite the original FADE paper.
+To use PyFADE to validate your methods, please cite the original FADE paper and note the use of the PyFADE implementation.
 
 ```bibtex
 @article{choi2015referenceless,
