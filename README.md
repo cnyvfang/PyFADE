@@ -151,7 +151,7 @@ To use PyFADE to validate your methods, please cite the original FADE paper and 
 }
 ```
 
-If this port is useful in your work, we also hope you will consider citing our
+If this implementation is useful in your work, we also hope you will consider citing our
 related dehazing work.
 
 ```bibtex
