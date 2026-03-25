@@ -4,24 +4,29 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+import struct
 from typing import Iterable, Sequence
+import zlib
 
 import numpy as np
 from PIL import Image
+from scipy import ndimage
 from scipy.io import loadmat
 from scipy.linalg import solve
+import turbojpeg
 from tqdm.auto import tqdm
 
 from ._compat import (
     border_in,
     border_out,
     conv2_same,
-    entropy_uint8_blocks,
+    entropy_integer_blocks,
     fspecial_gaussian,
     imfilter_replicate,
+    matlab_uint8_cast,
     matlab_colon,
     nanvar_sample,
-    rgb2gray_matlab_uint8,
+    rgb2gray_matlab,
     rgb2hsv_matlab,
     sample_std,
     split_blocks,
@@ -52,13 +57,146 @@ class FolderResult:
 
 
 def load_image(path: str | Path) -> np.ndarray:
-    with Image.open(path) as image:
+    image_path = Path(path)
+    suffix = image_path.suffix.lower()
+    header = _read_png_header(image_path) if suffix == ".png" else None
+    if header is not None and header["bit_depth"] == 16:
+        return _load_png_preserve_precision(image_path)
+    if suffix in (".jpg", ".jpeg"):
+        decoded = _load_jpeg_with_turbojpeg(image_path)
+        if decoded is not None:
+            return decoded
+    with Image.open(image_path) as image:
         return np.array(image.convert("RGB"), dtype=np.uint8)
 
 
-def _coerce_model_dir(model_dir: str | Path | None) -> str:
-    return str(Path(model_dir) if model_dir is not None else MODEL_DIR)
+def _load_jpeg_with_turbojpeg(path: Path) -> np.ndarray | None:
+    try:
+        decoded = turbojpeg.decompress(path.read_bytes())
+    except Exception:
+        return None
 
+    colorspace = getattr(decoded, "colorspace", None)
+    colorspace_name = getattr(colorspace, "name", None)
+    array = np.asarray(decoded)
+    if colorspace_name in {"YCbCr", "RGB"} and array.ndim == 3 and array.shape[2] == 3:
+        return np.array(array, dtype=np.uint8, copy=True)
+    if colorspace_name == "GRAY" and array.ndim == 2:
+        return np.repeat(array[:, :, None], 3, axis=2).astype(np.uint8, copy=False)
+    return None
+
+
+def _read_png_header(path: Path) -> dict[str, int] | None:
+    with path.open("rb") as handle:
+        if handle.read(8) != b"\x89PNG\r\n\x1a\n":
+            return None
+        length = struct.unpack(">I", handle.read(4))[0]
+        chunk_type = handle.read(4)
+        if chunk_type != b"IHDR" or length != 13:
+            return None
+        width, height, bit_depth, color_type, compression, flt, interlace = struct.unpack(">IIBBBBB", handle.read(length))
+    return {
+        "width": int(width),
+        "height": int(height),
+        "bit_depth": int(bit_depth),
+        "color_type": int(color_type),
+        "compression": int(compression),
+        "filter": int(flt),
+        "interlace": int(interlace),
+    }
+
+
+def _png_channel_count(color_type: int) -> int:
+    channels = {0: 1, 2: 3, 4: 2, 6: 4}.get(color_type)
+    if channels is None:
+        raise ValueError(f"unsupported PNG color type: {color_type}")
+    return channels
+
+
+def _png_paeth_predictor(a: int, b: int, c: int) -> int:
+    p = a + b - c
+    pa = abs(p - a)
+    pb = abs(p - b)
+    pc = abs(p - c)
+    if pa <= pb and pa <= pc:
+        return a
+    if pb <= pc:
+        return b
+    return c
+
+
+def _load_png_preserve_precision(path: Path) -> np.ndarray:
+    header = _read_png_header(path)
+    if header is None:
+        raise ValueError(f"{path} is not a valid PNG")
+    if header["compression"] != 0 or header["filter"] != 0 or header["interlace"] != 0:
+        raise ValueError("unsupported PNG encoding; expected standard non-interlaced PNG")
+
+    idat_chunks: list[bytes] = []
+    with path.open("rb") as handle:
+        handle.read(8)
+        while True:
+            raw_length = handle.read(4)
+            if not raw_length:
+                break
+            length = struct.unpack(">I", raw_length)[0]
+            chunk_type = handle.read(4)
+            chunk_data = handle.read(length)
+            handle.read(4)
+            if chunk_type == b"IDAT":
+                idat_chunks.append(chunk_data)
+            elif chunk_type == b"IEND":
+                break
+
+    channels = _png_channel_count(header["color_type"])
+    bytes_per_sample = 2 if header["bit_depth"] == 16 else 1
+    bytes_per_pixel = channels * bytes_per_sample
+    row_bytes = header["width"] * bytes_per_pixel
+    decompressed = zlib.decompress(b"".join(idat_chunks))
+    expected_size = header["height"] * (row_bytes + 1)
+    if len(decompressed) != expected_size:
+        raise ValueError("unexpected decompressed PNG size")
+
+    decoded = np.empty((header["height"], row_bytes), dtype=np.uint8)
+    prev_row = np.zeros(row_bytes, dtype=np.uint8)
+    offset = 0
+    for row_idx in range(header["height"]):
+        filter_type = decompressed[offset]
+        offset += 1
+        row = np.frombuffer(decompressed[offset : offset + row_bytes], dtype=np.uint8).copy()
+        offset += row_bytes
+        if filter_type == 0:
+            pass
+        elif filter_type == 1:
+            for idx in range(bytes_per_pixel, row_bytes):
+                row[idx] = (int(row[idx]) + int(row[idx - bytes_per_pixel])) & 0xFF
+        elif filter_type == 2:
+            row = ((row.astype(np.uint16) + prev_row.astype(np.uint16)) & 0xFF).astype(np.uint8)
+        elif filter_type == 3:
+            for idx in range(row_bytes):
+                left = int(row[idx - bytes_per_pixel]) if idx >= bytes_per_pixel else 0
+                up = int(prev_row[idx])
+                row[idx] = (int(row[idx]) + ((left + up) // 2)) & 0xFF
+        elif filter_type == 4:
+            for idx in range(row_bytes):
+                left = int(row[idx - bytes_per_pixel]) if idx >= bytes_per_pixel else 0
+                up = int(prev_row[idx])
+                up_left = int(prev_row[idx - bytes_per_pixel]) if idx >= bytes_per_pixel else 0
+                row[idx] = (int(row[idx]) + _png_paeth_predictor(left, up, up_left)) & 0xFF
+        else:
+            raise ValueError(f"unsupported PNG filter type: {filter_type}")
+        decoded[row_idx] = row
+        prev_row = row
+
+    dtype = ">u2" if header["bit_depth"] == 16 else np.uint8
+    image = np.frombuffer(decoded.tobytes(), dtype=dtype).reshape(header["height"], header["width"], channels)
+    if header["bit_depth"] == 16:
+        image = image.astype(np.uint16, copy=False)
+    if header["color_type"] in (4, 6):
+        image = image[:, :, :-1]
+    if image.shape[2] == 1:
+        image = np.repeat(image, 3, axis=2)
+    return image
 
 def _to_numpy_array(image: object) -> np.ndarray:
     if hasattr(image, "detach") and hasattr(image, "cpu") and hasattr(image, "numpy"):
@@ -66,18 +204,26 @@ def _to_numpy_array(image: object) -> np.ndarray:
     return np.asarray(image)
 
 
-def _float_to_uint8_image(array: np.ndarray) -> np.ndarray:
+def _float_to_integer_image(array: np.ndarray) -> np.ndarray:
     finite_mask = np.isfinite(array)
     if np.any(finite_mask):
         finite_values = array[finite_mask]
         if float(np.min(finite_values)) >= -FLOAT_UNIT_RANGE_TOL and float(np.max(finite_values)) <= (1.0 + FLOAT_UNIT_RANGE_TOL):
             array = array * 255.0
-    array = np.nan_to_num(array, nan=0.0, posinf=255.0, neginf=0.0)
-    array = np.clip(array, 0.0, 255.0)
-    return np.clip(np.floor(array + 0.5), 0, 255).astype(np.uint8)
+            upper = 255.0
+            dtype = np.uint8
+        else:
+            upper = 255.0 if float(np.max(finite_values)) <= (255.0 + FLOAT_UNIT_RANGE_TOL) else 65535.0
+            dtype = np.uint8 if upper <= 255.0 else np.uint16
+    else:
+        upper = 255.0
+        dtype = np.uint8
+    array = np.nan_to_num(array, nan=0.0, posinf=upper, neginf=0.0)
+    array = np.clip(array, 0.0, upper)
+    return np.clip(np.floor(array + 0.5), 0, upper).astype(dtype)
 
 
-def _ensure_uint8_rgb(image: object) -> np.ndarray:
+def _ensure_rgb_image(image: object) -> np.ndarray:
     array = _to_numpy_array(image)
     if array.ndim != 3:
         raise ValueError("expected an RGB image with shape (H, W, 3)")
@@ -90,11 +236,17 @@ def _ensure_uint8_rgb(image: object) -> np.ndarray:
     else:
         raise ValueError("expected an RGB image with shape (H, W, 3) or (3, H, W)")
 
-    if array.dtype != np.uint8:
-        if np.issubdtype(array.dtype, np.floating):
-            array = _float_to_uint8_image(array)
+    if np.issubdtype(array.dtype, np.floating):
+        array = _float_to_integer_image(array)
+    elif array.dtype == np.uint8 or array.dtype == np.uint16:
+        return array
+    elif np.issubdtype(array.dtype, np.integer):
+        if np.iinfo(array.dtype).max <= 255:
+            array = np.clip(array, 0, 255).astype(np.uint8)
         else:
-            array = array.astype(np.uint8)
+            array = np.clip(array, 0, 65535).astype(np.uint16)
+    else:
+        raise TypeError("expected an integer or floating-point RGB image")
     return array
 
 
@@ -105,20 +257,16 @@ def _normalize_image_batch(image: object) -> tuple[list[np.ndarray], bool]:
         channels_last = array.shape[3] in (3, 4)
         if channels_first and not channels_last:
             images = [np.moveaxis(array[idx, :3], 0, -1) for idx in range(array.shape[0])]
-            return [_ensure_uint8_rgb(item) for item in images], True
+            return [_ensure_rgb_image(item) for item in images], True
         if channels_last:
             images = [array[idx, :, :, :3] for idx in range(array.shape[0])]
-            return [_ensure_uint8_rgb(item) for item in images], True
+            return [_ensure_rgb_image(item) for item in images], True
         raise ValueError("expected a batch with shape (B, 3, H, W) or (B, H, W, 3)")
 
-    return [_ensure_uint8_rgb(array)], False
+    return [_ensure_rgb_image(array)], False
 
 
 def _trim_to_patch_grid(image: np.ndarray, patch_size: int = PATCH_SIZE) -> np.ndarray:
-    row, col, _ = image.shape
-    patch_row_num = row // patch_size
-    patch_col_num = col // patch_size
-    image = image[: patch_row_num * patch_size, : patch_col_num * patch_size, :3]
     row, col, _ = image.shape
     patch_row_num = row // patch_size
     patch_col_num = col // patch_size
@@ -148,7 +296,7 @@ def _load_reference_model(name: str, model_dir: str) -> ReferenceModel:
 
 
 def _load_models(model_dir: str | Path | None) -> tuple[ReferenceModel, ReferenceModel]:
-    model_dir_str = _coerce_model_dir(model_dir)
+    model_dir_str = str(Path(model_dir) if model_dir is not None else MODEL_DIR)
     fogfree = _load_reference_model("natural_fogfree_image_features_ps8.mat", model_dir_str)
     foggy = _load_reference_model("natural_foggy_image_features_ps8.mat", model_dir_str)
     return fogfree, foggy
@@ -158,6 +306,42 @@ def _load_models(model_dir: str | Path | None) -> tuple[ReferenceModel, Referenc
 def _mscn_window() -> np.ndarray:
     window = fspecial_gaussian((7, 7), 7.0 / 6.0)
     return window / window.sum()
+
+
+def _mscn_filter_replicate(image: np.ndarray) -> np.ndarray:
+    return imfilter_replicate(image.astype(np.float64, copy=False), _mscn_window())
+
+
+@lru_cache(maxsize=1)
+def _constant_window_lookup() -> tuple[np.ndarray, np.ndarray]:
+    data = loadmat(MODEL_DIR / "matlab_constant_window_lookup.mat")
+    return (
+        np.asarray(data["mu_offsets"], dtype=np.float64).reshape(-1),
+        np.asarray(data["m2_offsets"], dtype=np.float64).reshape(-1),
+    )
+
+
+def _apply_uint8_constant_window_lookup(
+    gray: np.ndarray,
+    mu: np.ndarray,
+    second_moment: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    local_min = ndimage.minimum_filter(gray, size=7, mode="nearest")
+    local_max = ndimage.maximum_filter(gray, size=7, mode="nearest")
+    constant_window = local_min == local_max
+    if not np.any(constant_window):
+        return mu, second_moment
+
+    gray_uint8 = matlab_uint8_cast(gray)
+    mu_offsets, m2_offsets = _constant_window_lookup()
+    adjusted_mu = mu.copy()
+    adjusted_second_moment = second_moment.copy()
+    adjusted_mu[constant_window] = gray[constant_window] + mu_offsets[gray_uint8[constant_window]]
+    adjusted_second_moment[constant_window] = (
+        gray[constant_window] * gray[constant_window]
+        + m2_offsets[gray_uint8[constant_window]]
+    )
+    return adjusted_mu, adjusted_second_moment
 
 
 @lru_cache(maxsize=1)
@@ -214,8 +398,14 @@ def _ce(image: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return ce_gray, ce_by, ce_rg
 
 
+def _mscn_from_moments(gray: np.ndarray, mu: np.ndarray, second_moment: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    mu_sq = mu * mu
+    sigma = np.sqrt(np.abs(second_moment - mu_sq))
+    return sigma, (gray - mu) / (sigma + 1.0)
+
+
 def _extract_features(image: np.ndarray) -> tuple[np.ndarray, tuple[int, int]]:
-    image = _ensure_uint8_rgb(image)
+    image = _ensure_rgb_image(image)
     image = _trim_to_patch_grid(image, PATCH_SIZE)
     row, col, _ = image.shape
     if row == 0 or col == 0:
@@ -225,8 +415,8 @@ def _extract_features(image: np.ndarray) -> tuple[np.ndarray, tuple[int, int]]:
     r = image_f[:, :, 0]
     g = image_f[:, :, 1]
     b = image_f[:, :, 2]
-    ig = rgb2gray_matlab_uint8(image)
-    ig_uint8 = ig.astype(np.uint8)
+    ig = rgb2gray_matlab(image)
+    ig_uint8 = matlab_uint8_cast(ig)
 
     irn = r / 255.0
     ign = g / 255.0
@@ -234,11 +424,11 @@ def _extract_features(image: np.ndarray) -> tuple[np.ndarray, tuple[int, int]]:
     idark = np.minimum(np.minimum(irn, ign), ibn)
     isat = rgb2hsv_matlab(image)[:, :, 1]
 
-    mscn_window = _mscn_window()
-    mu = imfilter_replicate(ig, mscn_window)
-    mu_sq = mu * mu
-    sigma = np.sqrt(np.abs(imfilter_replicate(ig * ig, mscn_window) - mu_sq))
-    mscn = (ig - mu) / (sigma + 1.0)
+    mu = _mscn_filter_replicate(ig)
+    second_moment = _mscn_filter_replicate(ig * ig)
+    if image.dtype == np.uint8:
+        mu, second_moment = _apply_uint8_constant_window_lookup(ig, mu, second_moment)
+    sigma, mscn = _mscn_from_moments(ig, mu, second_moment)
     with np.errstate(divide="ignore", invalid="ignore"):
         cv = sigma / mu
 
@@ -264,7 +454,7 @@ def _extract_features(image: np.ndarray) -> tuple[np.ndarray, tuple[int, int]]:
     mean_ce_by = split_blocks(ce_by, PATCH_SIZE).mean(axis=(2, 3))
     mean_ce_rg = split_blocks(ce_rg, PATCH_SIZE).mean(axis=(2, 3))
 
-    ie = entropy_uint8_blocks(split_blocks(ig_uint8, PATCH_SIZE))
+    ie = entropy_integer_blocks(split_blocks(ig_uint8, PATCH_SIZE))
     mean_id = split_blocks(idark, PATCH_SIZE).mean(axis=(2, 3))
     mean_is = split_blocks(isat, PATCH_SIZE).mean(axis=(2, 3))
 

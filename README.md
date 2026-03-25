@@ -1,23 +1,27 @@
 # PyFADE
 
-**⚠️ Development and benchmarking in progress, please wait for the stable version which will be released soon.**
-
 PyFADE is an unofficial Python implementation of FADE (Fog Aware Density Evaluator).
+
 The implementation is designed to closely match the MATLAB results, while providing higher efficiency and stronger plug-and-play compatibility with existing experimental code.
+
+
 
 ## ⚙️ Installation
 
-Install from PyPI with:
+Install from PyPI:
 
 ```bash
 pip install fade-python
 ```
 
+The published distribution name is `fade-python`, while the import package and
+CLI command remain `pyfade`.
+
 Install from a local checkout:
 
 ```bash
-git clone https://github.com/cnyvfang/PyFADE
-cd pyfade
+git clone https://github.com/cnyvfang/PyFADE.git
+cd PyFADE
 # Option 1:
 pip install .              # standard install
 # Option 2:
@@ -26,8 +30,8 @@ pip install -e ".[dev]"    # editable install for development
 pip install ".[tensor]"    # with PyTorch input support
 ```
 
-The published distribution name is
-`fade-python`, while the import package and CLI command remain `pyfade`.
+The base install already includes the current runtime dependencies used by the
+latest implementation, including `numba` and `turbojpeg`.
 
 ## 🔨 Usage
 
@@ -38,7 +42,7 @@ from pyfade import fade
 ### Accepted inputs
 
 - Image path: `.jpg`, `.jpeg`, `.png`, `.bmp`, `.tif`, `.tiff`
-- Folder path: a flat directory of supported image files
+- Folder path: a flat, non-recursive directory of supported image files
 - `.npy` path: loaded and processed as a NumPy array
 - NumPy arrays:
   `(H, W, 3)`, `(3, H, W)`, `(B, H, W, 3)`, or `(B, 3, H, W)`
@@ -90,6 +94,9 @@ import numpy as np
 image = np.zeros((256, 256, 3), dtype=np.uint8)
 score = fade(image)
 
+np.save("sample.npy", image)
+score_from_npy = fade("sample.npy")
+
 batch = np.random.randint(0, 256, size=(8, 3, 256, 256), dtype=np.uint8)
 scores, density_maps = fade(batch, workers=4, progress=True, return_map=True)
 ```
@@ -131,8 +138,9 @@ pyfade /path/to/image.png --return-map
 
 ## 📖 Reference
 
-To use PyFADE to validate your methods, please cite the paper of FADE.
-```bash
+To use PyFADE to validate your methods, please cite the original FADE paper.
+
+```bibtex
 @article{choi2015referenceless,
   title={Referenceless prediction of perceptual fog density and perceptual image defogging},
   author={Choi, Lark Kwon and You, Jaehee and Bovik, Alan Conrad},
@@ -144,8 +152,11 @@ To use PyFADE to validate your methods, please cite the paper of FADE.
   publisher={IEEE}
 }
 ```
-If you find our port useful, we would appreciate it if you consider citing our work.
-```bash
+
+If this port is useful in your work, we also hope you will consider citing our
+related dehazing work.
+
+```bibtex
 @article{fang2024real,
   title={Real-world image dehazing with coherence-based pseudo labeling and cooperative unfolding network},
   author={Fang, Chengyu and He, Chunming and Xiao, Fengyang and Zhang, Yulun and Tang, Longxiang and Zhang, Yuelin and Li, Kai and Li, Xiu},
@@ -158,45 +169,35 @@ If you find our port useful, we would appreciate it if you consider citing our w
 
 ## 📈 Benchmark and Precision Summary
 
-The table below uses the `RTTS` dataset and the dehazing results from `PRISM (Not yet public)` with `4322` images.
+| Runtime       | Workers | Total Time (s) | Throughput (img/s) | Runtime       | Workers | Total Time (s) | Throughput (img/s) |
+|---------------|--------:|---------------:|-------------------:|---------------|--------:|---------------:|-------------------:|
+| MATLAB        |       1 |         809.04 |             5.3909 | Ours          |       1 |         393.47 |            10.9844 |
+| MATLAB        |       4 |         286.69 |            15.5351 | Ours          |       4 |         142.04 |            30.4283 |
+| MATLAB        |       8 |         216.34 |            20.7242 | Ours          |       8 |         111.89 |            38.6282 |
 
-| Runtime                 | Workers | Total Time (s) | Throughput (img/s) | Mean score | Mean score diff vs. MATLAB  | Max score abs diff |
-|-------------------------|--------:|---------------:| ---: | ---: | ---: | ---: |
-| MATLAB                  |       1 |         809.04 | 5.3909 | 0.470454676887910 | 0.000e+00  | 0.000e+00 |
-| MATLAB                  |       4 |         286.69 | 15.5351 | 0.470454676887910 | N/A | N/A  |
-| MATLAB                  |       8 |         216.34 | 20.7242 | 0.470454676887910 | N/A | N/A  |
-| Python non-optimization |       1 |        1785.01 | 2.4226 | 0.470454676908741 | 2.083e-11 | 1.346e-08  |
-| Python optimized        |       1 |         546.15 | 7.9248 | 0.470454676908513 | 2.060e-11 | 1.346e-08  |
-| Python optimized        |       4 |         169.47 | 25.6466 | 0.470454676908513 | N/A | N/A  |
-| Python optimized        |       8  |         131.98 | 32.9707 | 0.470454676908513 | N/A | N/A  |
+| Dataset            | Runtime  | Mean Score | Runtime | Mean Score | Mean Diff | Max Diff |
+|--------------------|----------|-----------:|---------|-----------:|----------:|---------:|
+| RTTS Hazy Images   | MATLAB   | 2.514381896977223 | Ours | 2.514345050406552 | -3.685e-05 | 4.163e-03 |
+| RTTS PRISM Dehazed | MATLAB   | 0.470454676887910 | Ours | 0.470454676888912 | 1.002e-12 | 1.346e-08 |
+| Mini-ImageNet Testset | MATLAB   | 0.484498390241121 | Ours | 0.484496958259041 | -1.432e-06 | 2.358e-03 |
 
-Our initial Python port was already highly consistent with MATLAB, but slower. The optimized Python version preserves MATLAB-level numerical agreement while substantially improving single-thread performance. On this machine (Apple M2 Pro, 32GB RAM), the optimized Python version is faster than MATLAB with 1, 4, and 8 image-level workers.
 
-## 🔍 MATLAB vs. Initial Python Port
+
+## 🔍 MATLAB Version vs. Current PyFADE
 
 - Both versions implement the same FADE algorithm and use the same original
   reference models.
-- MATLAB relies on built-in operators such as `rgb2gray`, `rgb2hsv`,
-  `fspecial`, `imfilter`, `im2col`, `entropy`, `nanvar/std`, and `mrdivide`.
-- The Python port reproduces those semantics explicitly, including patch order,
-  border handling, convolution alignment, variance rules, and entropy behavior.
-- The Python package provides a broader interface surface than the original
-  MATLAB function: it supports folder paths, image paths, `.npy` files, NumPy
-  arrays, and tensor-like inputs.
-- Precision of the initial Python version was already close to MATLAB.
-- Performance of the initial Python single-thread version was much worse than
-  MATLAB single-thread.
-
-## 🪄 Optimized Python Port vs. Initial Python Port
-
-- The score definition, feature definition, bundled model parameters, and
-  MATLAB-alignment rules are unchanged.
-- The optimized version improves the implementation, not the algorithm:
+- MATLAB relies on built-in operators such as `rgb2gray`, `rgb2hsv`,`fspecial`, `imfilter`, `im2col`, `entropy`, `nanvar/std`, and `mrdivide`.
+- PyFADE reproduces those semantics explicitly, including patch order, border handling, convolution alignment, variance rules, and entropy behavior.
+- PyFADE provides a broader interface surface than the original MATLAB function: it supports folder paths, image paths, `.npy` files, NumPy arrays, and tensor-like inputs.
+- PyFADE also preserves higher-precision image I/O paths such as 16-bit PNG input and normalized float array/tensor input.
+- Relative to the original MATLAB code, the current package adds:
+  - image-level multi-threaded execution
   - vectorized rank-1 update for model-distance computation
   - cached MSCN and CE kernels
   - faster 1D convolution path for `1xN` and `Nx1` kernels
   - vectorized packed-`bincount` entropy evaluation
-- Precision is effectively unchanged.
-- Single-thread performance improved from `1784.01s` to `545.38s`,
-  about `3.27x` faster than the initial Python version.
-
+  - `numba`-accelerated hotspots for HSV conversion, entropy, and variance
+  - faster JPEG decoding through `turbojpeg`
+- The precision difference is maintained at the level of floating-point noise.
+- On the original paired `RTTS` workload benchmark in this repository, the current PyFADE implementation is faster than MATLAB at `1`, `4`, and `8` image-level workers.

@@ -4,7 +4,135 @@ from functools import lru_cache
 from typing import Iterable
 
 import numpy as np
+from numba import njit
 from scipy import ndimage, signal
+
+
+@njit(cache=True)
+def _rgb2hsv_matlab_uint8_numba(image: np.ndarray) -> np.ndarray:
+    height, width, _ = image.shape
+    hsv = np.empty((height, width, 3), dtype=np.float64)
+    for row in range(height):
+        for col in range(width):
+            r = image[row, col, 0] / 255.0
+            g = image[row, col, 1] / 255.0
+            b = image[row, col, 2] / 255.0
+
+            maxc = r if r >= g and r >= b else (g if g >= b else b)
+            minc = r if r <= g and r <= b else (g if g <= b else b)
+            delta = maxc - minc
+
+            h = 0.0
+            s = 0.0
+            if maxc > 0.0:
+                s = delta / maxc
+
+            if delta > 0.0:
+                if maxc == r:
+                    h = ((g - b) / delta) % 6.0
+                elif maxc == g:
+                    h = ((b - r) / delta) + 2.0
+                else:
+                    h = ((r - g) / delta) + 4.0
+                h = (h / 6.0) % 1.0
+
+            hsv[row, col, 0] = h
+            hsv[row, col, 1] = s
+            hsv[row, col, 2] = maxc
+    return hsv
+
+
+@njit(cache=True)
+def _nanvar_last2_numba(blocks: np.ndarray) -> np.ndarray:
+    patch_rows, patch_cols, block_rows, block_cols = blocks.shape
+    out = np.empty((patch_rows, patch_cols), dtype=np.float64)
+    for patch_row in range(patch_rows):
+        for patch_col in range(patch_cols):
+            count = 0
+            total = 0.0
+            for row in range(block_rows):
+                for col in range(block_cols):
+                    value = blocks[patch_row, patch_col, row, col]
+                    if not np.isnan(value):
+                        count += 1
+                        total += value
+
+            if count == 0:
+                out[patch_row, patch_col] = np.nan
+                continue
+            if count == 1:
+                out[patch_row, patch_col] = 0.0
+                continue
+
+            mean = total / count
+            sumsq = 0.0
+            for row in range(block_rows):
+                for col in range(block_cols):
+                    value = blocks[patch_row, patch_col, row, col]
+                    if not np.isnan(value):
+                        delta = value - mean
+                        sumsq += delta * delta
+            out[patch_row, patch_col] = sumsq / (count - 1.0)
+    return out
+
+
+@njit(cache=True)
+def _nanvar_axis0_2d_numba(blocks: np.ndarray) -> np.ndarray:
+    rows, cols = blocks.shape
+    out = np.empty(cols, dtype=np.float64)
+    for col in range(cols):
+        count = 0
+        total = 0.0
+        for row in range(rows):
+            value = blocks[row, col]
+            if not np.isnan(value):
+                count += 1
+                total += value
+
+        if count == 0:
+            out[col] = np.nan
+            continue
+        if count == 1:
+            out[col] = 0.0
+            continue
+
+        mean = total / count
+        sumsq = 0.0
+        for row in range(rows):
+            value = blocks[row, col]
+            if not np.isnan(value):
+                delta = value - mean
+                sumsq += delta * delta
+        out[col] = sumsq / (count - 1.0)
+    return out
+
+
+@njit(cache=True)
+def _entropy_blocks_u8_numba(blocks: np.ndarray) -> np.ndarray:
+    patch_rows, patch_cols, block_rows, block_cols = blocks.shape
+    block_area = block_rows * block_cols
+    entropy = np.empty((patch_rows, patch_cols), dtype=np.float64)
+    terms = np.zeros(block_area + 1, dtype=np.float64)
+    for count in range(1, block_area + 1):
+        prob = count / block_area
+        terms[count] = -(prob * np.log2(prob))
+
+    hist = np.empty(256, dtype=np.int64)
+    for patch_row in range(patch_rows):
+        for patch_col in range(patch_cols):
+            for idx in range(256):
+                hist[idx] = 0
+            for row in range(block_rows):
+                for col in range(block_cols):
+                    hist[int(blocks[patch_row, patch_col, row, col])] += 1
+
+            acc = 0.0
+            for idx in range(256):
+                count = hist[idx]
+                if count != 0:
+                    acc += terms[count]
+            entropy[patch_row, patch_col] = acc
+    return entropy
 
 
 def matlab_colon(start: float, stop: float, step: float = 1.0) -> np.ndarray:
@@ -82,23 +210,41 @@ def conv2_same(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     return full[row_start:row_end, col_start:col_end]
 
 
-def _round_like_matlab_uint8(values: np.ndarray) -> np.ndarray:
+def _round_like_matlab_integer(values: np.ndarray, dtype: np.dtype | type[np.uint8] | type[np.uint16]) -> np.ndarray:
+    target_dtype = np.dtype(dtype)
+    if not np.issubdtype(target_dtype, np.unsignedinteger):
+        raise TypeError("target dtype must be an unsigned integer type")
     rounded = np.floor(values + 0.5)
-    return np.clip(rounded, 0, 255).astype(np.uint8)
+    max_value = np.iinfo(target_dtype).max
+    return np.clip(rounded, 0, max_value).astype(target_dtype)
 
 
-def rgb2gray_matlab_uint8(image: np.ndarray) -> np.ndarray:
-    """Match double(rgb2gray(uint8 RGB))."""
+def matlab_uint8_cast(values: np.ndarray) -> np.ndarray:
+    """Match MATLAB's uint8(...) conversion, including saturation for uint16 inputs."""
+    return _round_like_matlab_integer(np.asarray(values, dtype=np.float64), np.uint8)
+
+
+def rgb2gray_matlab(image: np.ndarray) -> np.ndarray:
+    """Match double(rgb2gray(RGB)) for uint8 and uint16 MATLAB images."""
+    if image.dtype not in (np.uint8, np.uint16):
+        raise TypeError("rgb2gray_matlab expects a uint8 or uint16 RGB image")
     weights = np.array(
         [0.298936021293775, 0.587043074451121, 0.114020904255103],
         dtype=np.float64,
     )
     gray = np.tensordot(image.astype(np.float64, copy=False), weights, axes=([2], [0]))
-    return _round_like_matlab_uint8(gray).astype(np.float64)
+    return _round_like_matlab_integer(gray, image.dtype).astype(np.float64)
 
 
 def rgb2hsv_matlab(image: np.ndarray) -> np.ndarray:
-    rgb = image.astype(np.float64, copy=False) / 255.0
+    if image.dtype == np.uint8:
+        return _rgb2hsv_matlab_uint8_numba(image)
+    if np.issubdtype(image.dtype, np.integer):
+        scale = float(np.iinfo(image.dtype).max)
+    else:
+        image_max = float(np.nanmax(image))
+        scale = 1.0 if image_max <= 1.0 else 255.0
+    rgb = image.astype(np.float64, copy=False) / scale
     r = rgb[..., 0]
     g = rgb[..., 1]
     b = rgb[..., 2]
@@ -167,6 +313,11 @@ def split_blocks(image: np.ndarray, ps: int) -> np.ndarray:
 
 def nanvar_sample(blocks: np.ndarray, axis: tuple[int, ...]) -> np.ndarray:
     blocks = np.asarray(blocks, dtype=np.float64)
+    normalized_axis = tuple(sorted(int(value) for value in axis))
+    if blocks.ndim == 4 and normalized_axis == (2, 3):
+        return _nanvar_last2_numba(blocks)
+    if blocks.ndim == 2 and normalized_axis == (0,):
+        return _nanvar_axis0_2d_numba(blocks)
     finite_mask = np.isfinite(blocks)
     counts_keepdims = np.sum(finite_mask, axis=axis, keepdims=True)
     counts = np.sum(finite_mask, axis=axis)
@@ -197,12 +348,29 @@ def _entropy_terms(block_area: int) -> np.ndarray:
     return terms
 
 
-def entropy_uint8_blocks(blocks: np.ndarray) -> np.ndarray:
+def entropy_integer_blocks(blocks: np.ndarray) -> np.ndarray:
+    if not np.issubdtype(blocks.dtype, np.integer):
+        raise TypeError("entropy_integer_blocks expects integer-valued blocks")
+    if blocks.dtype == np.uint8:
+        return _entropy_blocks_u8_numba(blocks)
     patch_row_num, patch_col_num, _, _ = blocks.shape
     flat_blocks = blocks.reshape(patch_row_num * patch_col_num, -1)
     block_area = flat_blocks.shape[1]
-    offsets = (256 * np.arange(flat_blocks.shape[0], dtype=np.int64))[:, None]
-    packed = flat_blocks.astype(np.int64, copy=False) + offsets
-    counts = np.bincount(packed.ravel(), minlength=flat_blocks.shape[0] * 256).reshape(flat_blocks.shape[0], 256)
-    entropy = _entropy_terms(block_area)[counts].sum(axis=1)
+    sorted_blocks = np.sort(flat_blocks, axis=1)
+    starts = np.ones_like(sorted_blocks, dtype=bool)
+    starts[:, 1:] = sorted_blocks[:, 1:] != sorted_blocks[:, :-1]
+    rows, cols = np.nonzero(starts)
+    next_cols = np.empty_like(cols)
+    next_cols[:-1] = cols[1:]
+    next_cols[-1] = block_area
+    row_change = np.empty_like(rows, dtype=bool)
+    row_change[:-1] = rows[1:] != rows[:-1]
+    row_change[-1] = True
+    next_cols[row_change] = block_area
+    run_lengths = next_cols - cols
+    entropy = np.bincount(
+        rows,
+        weights=_entropy_terms(block_area)[run_lengths],
+        minlength=flat_blocks.shape[0],
+    )
     return entropy.reshape(patch_row_num, patch_col_num)

@@ -1,22 +1,32 @@
 from __future__ import annotations
 
 from pathlib import Path
+import struct
+import zlib
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from pyfade import FolderResult, fade, fade_array, fade_image, load_image
 from pyfade._compat import (
     border_in,
     border_out,
     conv2_same,
-    entropy_uint8_blocks,
+    entropy_integer_blocks,
     fspecial_gaussian,
     imfilter_replicate,
+    matlab_uint8_cast,
     matlab_colon,
     nanvar_sample,
-    rgb2gray_matlab_uint8,
+    rgb2gray_matlab,
+    rgb2hsv_matlab,
     split_blocks,
+)
+from pyfade.core import (
+    _apply_uint8_constant_window_lookup,
+    _constant_window_lookup,
+    _mscn_filter_replicate,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -44,6 +54,28 @@ def make_test_image() -> np.ndarray:
     image[:, :, 1] = (rows * 7 + cols * 19 + 23) % 256
     image[:, :, 2] = (rows * 29 + cols * 3 + 101) % 256
     return image
+
+
+def write_rgb16_png(path: Path, image: np.ndarray) -> None:
+    array = np.asarray(image, dtype=np.uint16)
+    if array.ndim != 3 or array.shape[2] != 3:
+        raise ValueError("expected an array with shape (H, W, 3)")
+
+    def chunk(chunk_type: bytes, data: bytes) -> bytes:
+        payload = chunk_type + data
+        crc = zlib.crc32(payload) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + payload + struct.pack(">I", crc)
+
+    height, width, _ = array.shape
+    ihdr = struct.pack(">IIBBBBB", width, height, 16, 2, 0, 0, 0)
+    scanlines = b"".join(b"\x00" + row.astype(">u2", copy=False).tobytes() for row in array)
+    idat = zlib.compress(scanlines)
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", idat)
+        + chunk(b"IEND", b"")
+    )
 
 
 def test_matlab_colon_matches_ce_grid() -> None:
@@ -81,12 +113,94 @@ def test_entropy_and_rgb2gray_are_deterministic() -> None:
         ],
         dtype=np.uint8,
     )
-    gray = rgb2gray_matlab_uint8(image)
+    gray = rgb2gray_matlab(image)
     np.testing.assert_array_equal(gray, np.array([[0.0, 255.0], [76.0, 150.0]]))
 
     block = np.array([[[[0, 0], [255, 255]]]], dtype=np.uint8)
-    entropy = entropy_uint8_blocks(block)
+    entropy = entropy_integer_blocks(block)
     np.testing.assert_allclose(entropy, np.array([[1.0]]))
+
+
+def test_entropy_and_rgb2gray_support_uint16() -> None:
+    image = np.array(
+        [
+            [[0, 0, 0], [65535, 65535, 65535]],
+            [[65535, 0, 0], [0, 65535, 0]],
+        ],
+        dtype=np.uint16,
+    )
+    gray = rgb2gray_matlab(image)
+    np.testing.assert_array_equal(gray, np.array([[0.0, 65535.0], [19591.0, 38472.0]]))
+
+    block = np.array([[[[0, 0], [65535, 65535]]]], dtype=np.uint16)
+    entropy = entropy_integer_blocks(block)
+    np.testing.assert_allclose(entropy, np.array([[1.0]]))
+
+
+def test_rgb2hsv_matches_known_primary_colors() -> None:
+    image = np.array(
+        [
+            [[255, 0, 0], [0, 255, 0]],
+            [[0, 0, 255], [255, 255, 255]],
+        ],
+        dtype=np.uint8,
+    )
+    hsv = rgb2hsv_matlab(image)
+    expected = np.array(
+        [
+            [[0.0, 1.0, 1.0], [1.0 / 3.0, 1.0, 1.0]],
+            [[2.0 / 3.0, 1.0, 1.0], [0.0, 0.0, 1.0]],
+        ],
+        dtype=np.float64,
+    )
+    np.testing.assert_allclose(hsv, expected, rtol=0.0, atol=1e-12)
+
+
+def test_matlab_uint8_cast_saturates_uint16_gray_values() -> None:
+    values = np.array([0.0, 1.2, 254.6, 255.4, 1024.0, 65535.0], dtype=np.float64)
+    casted = matlab_uint8_cast(values)
+    np.testing.assert_array_equal(casted, np.array([0, 1, 255, 255, 255, 255], dtype=np.uint8))
+
+
+def test_load_image_preserves_rgb16_png_precision(tmp_path: Path) -> None:
+    image = np.array(
+        [
+            [[0, 1, 2], [65535, 65534, 65533]],
+            [[12345, 23456, 34567], [45678, 56789, 60000]],
+        ],
+        dtype=np.uint16,
+    )
+    image_path = tmp_path / "rgb16.png"
+    write_rgb16_png(image_path, image)
+    loaded = load_image(image_path)
+    assert loaded.dtype == np.uint16
+    np.testing.assert_array_equal(loaded, image)
+
+
+def test_load_image_matches_pillow_for_rgb_jpeg(tmp_path: Path) -> None:
+    image_path = tmp_path / "rgb.jpg"
+    Image.fromarray(make_test_image(), mode="RGB").save(image_path, format="JPEG", quality=95)
+    loaded = load_image(image_path)
+    with Image.open(image_path) as image:
+        expected = np.array(image.convert("RGB"), dtype=np.uint8)
+    np.testing.assert_array_equal(loaded, expected)
+
+
+def test_uint8_constant_window_lookup_matches_matlab_reference_values() -> None:
+    mu_offsets, m2_offsets = _constant_window_lookup()
+
+    gray = np.full((16, 16), 88.0, dtype=np.float64)
+    mu = gray + 2.842170943040401e-14
+    second_moment = gray * gray + 4.263256414560601e-12
+    adjusted_mu, adjusted_second_moment = _apply_uint8_constant_window_lookup(gray, mu, second_moment)
+    np.testing.assert_allclose(adjusted_mu[8, 8], 88.0, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(adjusted_second_moment[8, 8], 88.0 * 88.0 + m2_offsets[88], rtol=0.0, atol=0.0)
+
+    gray = np.full((16, 16), 138.0, dtype=np.float64)
+    mu = np.full_like(gray, 138.0 + 5.684341886080802e-14)
+    second_moment = np.full_like(gray, 138.0 * 138.0)
+    adjusted_mu, _ = _apply_uint8_constant_window_lookup(gray, mu, second_moment)
+    np.testing.assert_allclose(adjusted_mu[8, 8], 138.0 + mu_offsets[138], rtol=0.0, atol=0.0)
 
 
 def test_conv2_same_matches_matlab_even_kernel_alignment() -> None:
@@ -101,6 +215,16 @@ def test_imfilter_replicate_matches_matlab_separable_gaussian_accumulation() -> 
     kernel = fspecial_gaussian((7, 7), 7.0 / 6.0)
     filtered = imfilter_replicate(image, kernel)
     np.testing.assert_allclose(filtered[8, 8], 255.00000000000009, rtol=0.0, atol=1e-13)
+
+
+def test_mscn_filter_replicate_matches_matlab_separable_accumulation() -> None:
+    image = np.full((16, 16), 255.0, dtype=np.float64)
+    np.testing.assert_allclose(
+        _mscn_filter_replicate(image)[8, 8],
+        255.00000000000009,
+        rtol=0.0,
+        atol=1e-13,
+    )
 
 
 def test_split_blocks_matches_im2col_distinct_patch_order() -> None:
