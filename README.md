@@ -1,8 +1,8 @@
 # PyFADE
 
-PyFADE is an unofficial Python implementation of FADE (Fog Aware Density Evaluator).
+FADE (Fog Aware Density Evaluator) is a method for estimating haze density in an image, and it is often used as an indicator for evaluating the dehazing performance of methods in image dehazing.
 
-The implementation is designed to closely match the MATLAB results, while providing higher efficiency and stronger plug-and-play compatibility with existing experimental code.
+PyFADE is an unofficial Python implementation of FADE. The implementation is designed to closely match the MATLAB results, while providing higher efficiency and stronger plug-and-play compatibility with existing experimental code.
 
 
 
