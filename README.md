@@ -197,5 +197,4 @@ related dehazing work.
   - vectorized packed-`bincount` entropy evaluation
   - `numba`-accelerated hotspots for HSV conversion, entropy, and variance
   - faster JPEG decoding through `turbojpeg`
-- The precision difference is maintained at the level of floating-point noise.
 - On the original paired `RTTS` workload benchmark in this repository, the current PyFADE implementation is faster than MATLAB at `1`, `4`, and `8` image-level workers.
