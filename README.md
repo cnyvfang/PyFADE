@@ -173,11 +173,11 @@ related dehazing work.
 | MATLAB        |       4 |         286.69 |            15.5351 | Ours          |       4 |         142.04 |            30.4283 |
 | MATLAB        |       8 |         216.34 |            20.7242 | Ours          |       8 |         111.89 |            38.6282 |
 
-| Dataset            | Runtime  | Mean Score | Runtime | Mean Score | Mean Diff | Max Diff |
-|--------------------|----------|-----------:|---------|-----------:|----------:|---------:|
-| RTTS Hazy Images   | MATLAB   | **2.5143**81896977223 | Ours | **2.5143**45050406552 | -3.685e-05 | 4.163e-03 |
-| RTTS PRISM Dehazed | MATLAB   | **0.47045467688**7910 | Ours | **0.47045467688**8912 | 1.002e-12 | 1.346e-08 |
-| Mini-ImageNet Testset | MATLAB   | **0.48449**8390241121 | Ours | **0.48449**6958259041 | -1.432e-06 | 2.358e-03 |
+| Dataset            | Runtime  |            Mean Score | Runtime |            Mean Score | Mean Diff | Max Diff |
+|--------------------|----------|----------------------:|---------|----------------------:|----------:|---------:|
+| RTTS Hazy Images   | MATLAB   |        2.514381896977 | Ours |        2.514345050406 | -3.685e-05 | 4.163e-03 |
+| RTTS PRISM Dehazed | MATLAB   |        0.470454676887 | Ours |        0.470454676888 | 1.002e-12 | 1.346e-08 |
+| Mini-ImageNet Testset | MATLAB   |        0.484498390241 | Ours |        0.484496958259 | -1.432e-06 | 2.358e-03 |
 
 
 
