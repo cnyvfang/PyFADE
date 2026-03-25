@@ -127,8 +127,6 @@ scores = fade(batch_tensor, workers=4, progress=True)
 
 ## 👨‍💻 CLI
 
-`PyFADE` installs a `pyfade` command and is imported with `import pyfade`:
-
 ```bash
 pyfade /path/to/image.png
 pyfade /path/to/folder --workers 4 --progress
@@ -177,9 +175,9 @@ related dehazing work.
 
 | Dataset            | Runtime  | Mean Score | Runtime | Mean Score | Mean Diff | Max Diff |
 |--------------------|----------|-----------:|---------|-----------:|----------:|---------:|
-| RTTS Hazy Images   | MATLAB   | 2.514381896977223 | Ours | 2.514345050406552 | -3.685e-05 | 4.163e-03 |
-| RTTS PRISM Dehazed | MATLAB   | 0.470454676887910 | Ours | 0.470454676888912 | 1.002e-12 | 1.346e-08 |
-| Mini-ImageNet Testset | MATLAB   | 0.484498390241121 | Ours | 0.484496958259041 | -1.432e-06 | 2.358e-03 |
+| RTTS Hazy Images   | MATLAB   | **2.5143**81896977223 | Ours | **2.5143**45050406552 | -3.685e-05 | 4.163e-03 |
+| RTTS PRISM Dehazed | MATLAB   | **0.47045467688**7910 | Ours | **0.47045467688**8912 | 1.002e-12 | 1.346e-08 |
+| Mini-ImageNet Testset | MATLAB   | **0.48449**8390241121 | Ours | **0.48449**6958259041 | -1.432e-06 | 2.358e-03 |
 
 
 
