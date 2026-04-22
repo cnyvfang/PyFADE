@@ -163,6 +163,13 @@ related dehazing work.
   pages={97859--97883},
   year={2024}
 }
+
+@article{fang2026prism,
+  title={PRISM: Rethinking Scattered Atmosphere Reconstruction as a Unified Understanding and Generation Model for Real-world Dehazing}, 
+  author={Chengyu Fang and Chunming He and Yuelin Zhang and Chubin Chen and Chenyang Zhu and Longxiang Tang and Xiu Li},
+  journal={arXiv preprint arXiv:2604.07048},
+  year={2026}
+}
 ```
 
 ## 📈 Benchmark and Precision Summary
